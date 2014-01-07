@@ -41,7 +41,7 @@ func check_url(url string, limit_ch chan int) {
 			return
 		}
 		fmt.Println(url)
-		file.WriteString(url + "\n")
+		file.WriteString(url + "\r\n")
 		file.Close()
 	}
 	<-limit_ch
