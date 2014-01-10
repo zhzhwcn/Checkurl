@@ -8,14 +8,18 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 )
 
-var MAX_CHECK_NUM = 10
+var MAX_CHECK_NUM = 5
 
 var succ_txt_name = "succ.txt"
 var source_txt_name = "url.txt"
 var lines []string
 var check_word = ""
+var total_lines = 0
+var limit_ch = make(chan int, MAX_CHECK_NUM)
+var wg sync.WaitGroup
 
 func read_source(file_name string) {
 	file, err := os.Open(file_name)
@@ -28,23 +32,30 @@ func read_source(file_name string) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
+	total_lines = len(lines)
 	return
 }
 
-func check_url(url string, limit_ch chan int) {
-	resp, _ := http.Get(url)
+func check_url(url string) {
+	defer wg.Done()
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("GET ERROR:" + url)
+		return
+	}
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	if strings.Index(string(body), check_word) != -1 {
 		file, err := os.OpenFile(succ_txt_name, os.O_APPEND|os.O_CREATE, os.ModeAppend)
 		if err != nil {
+			fmt.Println("FILE ERROR:" + url)
 			return
 		}
 		fmt.Println(url)
 		file.WriteString(url + "\r\n")
 		file.Close()
 	}
-	<-limit_ch
+	return
 }
 
 func main() {
@@ -58,9 +69,9 @@ func main() {
 	data, _, _ := reader.ReadLine()
 	check_word = string(data)
 	read_source(source_txt_name)
-	var limit_ch = make(chan int, MAX_CHECK_NUM)
 	for _, url := range lines {
-		limit_ch <- 1
-		go check_url(url, limit_ch)
+		wg.Add(1)
+		go check_url(url)
 	}
+	wg.Wait()
 }
